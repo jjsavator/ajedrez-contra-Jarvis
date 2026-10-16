@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#285c42">
+<meta name="description" content="Juega ajedrez contra Jarvis desde tu celular o computadora.">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<title>Ajedrez contra la computadora</title>
+<style>
+  :root { --light:#f0d9b5; --dark:#b58863; --accent:#4f7c59; --bg:#f4f5f7; --ink:#20242b; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; background:var(--bg); color:var(--ink); }
+  main { max-width:900px; margin:0 auto; padding:18px; }
+  h1 { margin:0 0 6px; font-size:clamp(1.45rem,4vw,2rem); }
+  .intro { margin:0 0 18px; color:#59616d; }
+  .layout { display:grid; grid-template-columns:minmax(0, 1fr) minmax(220px, 280px); gap:18px; align-items:start; }
+  .board-wrap { width:100%; max-width:620px; margin:auto; }
+  .board { display:grid; grid-template-columns:repeat(8,1fr); border:5px solid #5a4636; border-radius:5px; overflow:hidden; box-shadow:0 5px 18px #0002; aspect-ratio:1; }
+  .sq { display:flex; justify-content:center; align-items:center; position:relative; border:0; padding:0; min-width:0; aspect-ratio:1; cursor:pointer; font-size:clamp(1.65rem,6.4vw,3.65rem); line-height:1; user-select:none; -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
+  .light { background:var(--light); } .dark { background:var(--dark); }
+  .sq:focus-visible { outline:4px solid #2463eb; outline-offset:-4px; z-index:2; }
+  .sq.selected { box-shadow:inset 0 0 0 5px #4f9a58; }
+  .sq.last { background-image:linear-gradient(#b6db5580,#b6db5580); }
+  .sq.target::after { content:""; position:absolute; width:23%; height:23%; border-radius:50%; background:#1e553f88; pointer-events:none; }
+  .sq.capture::after { width:75%; height:75%; background:transparent; border:5px solid #1e553f99; }
+  .piece { filter:drop-shadow(0 1px 1px #0003); pointer-events:none; }
+  .white-piece { color:#fffdf6; text-shadow:-1px -1px 0 #44382c,1px -1px 0 #44382c,-1px 1px 0 #44382c,1px 1px 0 #44382c,0 2px 2px #0008; }
+  .black-piece { color:#252525; text-shadow:0 1px 1px #fff7; }
+  .coords { position:absolute; left:4px; top:2px; font-size:clamp(9px,1.7vw,13px); line-height:1; opacity:.78; font-weight:700; pointer-events:none; }
+  .light .coords { color:#795b3e; } .dark .coords { color:#f6e7d3; }
+  .panel { background:#fff; border-radius:12px; padding:16px; box-shadow:0 2px 10px #0000000d; }
+  .status { font-weight:750; font-size:1.08rem; margin:0 0 8px; }
+  .detail { color:#5c6470; font-size:.94rem; min-height:42px; margin:0 0 12px; }
+  .buttons { display:grid; gap:9px; }
+  button.action { border:0; border-radius:8px; padding:11px 13px; font:inherit; font-weight:650; cursor:pointer; }
+  .primary { background:#285c42; color:white; } .secondary { background:#e9edf1; color:#222a33; }
+  button.action:disabled { opacity:.55; cursor:not-allowed; }
+  .legend { font-size:.88rem; color:#616976; line-height:1.5; margin-top:14px; }
+  .moves { margin-top:14px; } .moves h2 { font-size:1rem; margin:0 0 7px; }
+  .move-list { max-height:170px; overflow:auto; font-size:.9rem; background:#f6f7f8; border-radius:8px; padding:8px; }
+  .move-row { display:grid; grid-template-columns:32px 1fr 1fr; gap:8px; padding:3px 2px; }
+  .move-row:nth-child(odd) { background:#e9edf1; }
+  .promotion { margin-top:12px; display:none; }
+  .promotion select { width:100%; padding:9px; border-radius:7px; border:1px solid #ccd1d8; font:inherit; }
+  .small { font-size:.82rem; color:#6a717b; margin-top:12px; }
+  @media(max-width:700px) {
+    main { padding:10px; }
+    .layout { grid-template-columns:1fr; gap:12px; }
+    .board-wrap { width:100%; max-width: min(100%, 560px); }
+    .board { border-width:3px; }
+    .sq { font-size:clamp(1.8rem, 10.2vw, 3.5rem); }
+    .panel { max-width:560px; width:100%; margin:auto; padding:14px; }
+    button.action { min-height:46px; }
+    .detail { min-height:unset; }
+    .moves { margin-top:12px; }
+  }
+  @media(max-width:380px) {
+    main { padding:6px; }
+    h1 { font-size:1.35rem; }
+    .intro { font-size:.92rem; }
+    .sq { font-size:clamp(1.55rem, 9.6vw, 2.4rem); }
+    .coords { font-size:9px; }
+  }
+  .credits { text-align:center; margin:22px 0 8px; padding:14px 10px; color:#626b76; font-size:.92rem; border-top:1px solid #d9dde2; }\n</style>
+</head>
+<body>
+<main>
+  <h1>♟ Ajedrez contra la computadora</h1>
+  <p class="intro">Tú juegas con blancas y la computadora (Jarvis) siempre juega con negras. Toca una pieza y después la casilla de destino.</p>
+  <div class="layout">
+    <section class="board-wrap" aria-label="Tablero de ajedrez">
+      <div id="board" class="board"></div>
+    </section>
+    <aside class="panel">
+      <p id="status" class="status">Tu turno — blancas</p>
+      <p id="detail" class="detail">Selecciona una pieza blanca para ver sus movimientos legales.</p>
+      <div class="buttons">
+        <button id="newGame" class="action primary">↻ Nueva partida</button>
+        <button id="installApp" class="action secondary" hidden>＋ Instalar aplicación</button>
+        <button id="undo" class="action secondary">↶ Deshacer último turno</button>
+        <button id="flip" class="action secondary">⇅ Girar tablero</button>
+      </div>
+      <div class="promotion" id="promotion">
+        <label for="promote">Coronar peón a:</label>
+        <select id="promote"><option value="q">Dama</option><option value="r">Torre</option><option value="b">Alfil</option><option value="n">Caballo</option></select>
+      </div>
+      <div class="moves">
+        <h2>Movimientos</h2>
+        <div id="moves" class="move-list">La partida todavía no ha comenzado.</div>
+      </div>
+      <p class="legend">La computadora juega automáticamente con negras y responde rápidamente. Las piezas pueden avanzar o retroceder siempre que su movimiento sea legal.</p>
+      <p class="small">La primera vez necesitas conexión a internet para cargar el motor de reglas de ajedrez. Después de abrir el archivo, el juego funciona en esta pestaña mientras esa biblioteca esté disponible.</p>
+    </aside>
+  </div>
+
+  <footer class="credits">Creado por José Isaí Salvador Batz y Jarvis</footer>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<script>
+(() => {
+  const boardEl = document.getElementById('board');
+  const statusEl = document.getElementById('status');
+  const detailEl = document.getElementById('detail');
+  const movesEl = document.getElementById('moves');
+  const undoBtn = document.getElementById('undo');
+  const promotionEl = document.getElementById('promotion');
+  const promoteSelect = document.getElementById('promote');
+  let game;
+  let selected = null;
+  let legalMoves = [];
+  let flipped = false;
+  let thinking = false;
+  let lastMove = null;
+  const glyphs = {
+    wk:'♔', wq:'♕', wr:'♖', wb:'♗', wn:'♘', wp:'♙',
+    bk:'♚', bq:'♛', br:'♜', bb:'♝', bn:'♞', bp:'♟'
+  };
+  const files = ['a','b','c','d','e','f','g','h'];
+
+  function startGame() {
+    game = new Chess();
+    selected = null; legalMoves = []; thinking = false; lastMove = null;
+    promotionEl.style.display = 'none';
+    render();
+    detailEl.textContent = 'Selecciona una pieza blanca para ver sus movimientos legales.';
+  }
+
+  function pieceAt(square) { return game.get(square); }
+  function render() {
+    boardEl.innerHTML = '';
+    const ranks = flipped ? [1,2,3,4,5,6,7,8] : [8,7,6,5,4,3,2,1];
+    const cols = flipped ? [...files].reverse() : files;
+    ranks.forEach(rank => cols.forEach(file => {
+      const sq = file + rank;
+      const isLight = (files.indexOf(file) + rank) % 2 === 1;
+      const btn = document.createElement('button');
+      btn.className = 'sq ' + (isLight ? 'light' : 'dark');
+      btn.setAttribute('aria-label', sq);
+      btn.dataset.square = sq;
+      if (selected === sq) btn.classList.add('selected');
+      if (lastMove && (lastMove.from === sq || lastMove.to === sq)) btn.classList.add('last');
+      const target = legalMoves.find(m => m.to === sq);
+      if (target) btn.classList.add(pieceAt(sq) ? 'capture' : 'target');
+      if ((flipped ? rank === 1 : rank === 8)) {
+        const c = document.createElement('span'); c.className='coords'; c.textContent=file; btn.appendChild(c);
+      }
+      if ((flipped ? files.indexOf(file) === 7 : files.indexOf(file) === 0)) {
+        const c = document.createElement('span'); c.className='coords'; c.style.left='auto'; c.style.right='4px'; c.style.top='auto'; c.style.bottom='2px'; c.textContent=rank; btn.appendChild(c);
+      }
+      const p = pieceAt(sq);
+      if (p) {
+        const span = document.createElement('span');
+        span.className = 'piece ' + (p.color === 'w' ? 'white-piece' : 'black-piece');
+        span.textContent = glyphs[p.color + p.type];
+        btn.appendChild(span);
+      }
+      btn.addEventListener('click', () => clickSquare(sq));
+      boardEl.appendChild(btn);
+    }));
+    updateStatus();
+    updateMoves();
+    undoBtn.disabled = game.history().length === 0 || thinking;
+  }
+
+  function clickSquare(sq) {
+    if (thinking || game.game_over() || game.turn() !== 'w') return;
+    const p = pieceAt(sq);
+    if (selected && legalMoves.some(m => m.to === sq)) {
+      const matching = legalMoves.filter(m => m.to === sq);
+      let promotion = 'q';
+      if (matching.some(m => m.promotion)) promotion = promoteSelect.value;
+      const move = game.move({ from:selected, to:sq, promotion });
+      selected = null; legalMoves = []; promotionEl.style.display = 'none';
+      if (move) {
+        lastMove = {from:move.from,to:move.to};
+        render();
+        if (!game.game_over()) {
+          thinking = true;
+          statusEl.textContent = 'La computadora está pensando…';
+          detailEl.textContent = 'La computadora juega con negras.';
+          undoBtn.disabled = true;
+          setTimeout(makeAIMove, 40);
+        }
+      } else render();
+      return;
+    }
+    if (p && p.color === 'w') {
+      selected = sq;
+      legalMoves = game.moves({ square:sq, verbose:true });
+      promotionEl.style.display = legalMoves.some(m => m.promotion) ? 'block' : 'none';
+      render();
+      detailEl.textContent = legalMoves.length ? 'Casillas marcadas: movimientos legales.' : 'Esa pieza no tiene movimientos legales.';
+    } else {
+      selected = null; legalMoves = []; promotionEl.style.display = 'none'; render();
+    }
+  }
+
+  // Simple minimax search with alpha-beta pruning. Chess.js supplies legal moves and game rules.
+  const values = {p:100,n:320,b:335,r:500,q:900,k:20000};
+  function evaluate() {
+    if (game.in_checkmate()) return game.turn() === 'w' ? -100000 : 100000;
+    if (game.in_draw() || game.in_stalemate() || game.in_threefold_repetition() || game.insufficient_material()) return 0;
+    let score = 0;
+    const b = game.board();
+    for (let r=0;r<8;r++) for (let c=0;c<8;c++) {
+      const p=b[r][c]; if (!p) continue;
+      const center = 3.5 - (Math.abs(3.5-r)+Math.abs(3.5-c))/2;
+      let v = values[p.type];
+      // Reward pawn progress, central control, and developing minor pieces.
+      if (p.type === 'p') v += (p.color === 'w' ? (6-r) : (r-1))*9;
+      if (p.type === 'n') v += center*10;
+      if (p.type === 'b') v += center*7;
+      if (p.type === 'q') v += center*3;
+      // Mild preference for keeping the king sheltered early in the game.
+      if (p.type === 'k' && game.history().length < 24 && (c === 1 || c === 6)) v += 18;
+      score += p.color === 'b' ? v : -v;
+    }
+    // A small mobility bonus helps the AI choose active positions.
+    const side = game.turn();
+    const mobility = game.moves().length;
+    score += (side === 'b' ? 1 : -1) * mobility * 1.5;
+    return score;
+  }
+  function moveOrderScore(m) {
+    let s = 0;
+    if (m.captured) s += 10 * values[m.captured] - values[m.piece];
+    if (m.promotion) s += values[m.promotion] + 800;
+    if (m.san && m.san.includes('+')) s += 80;
+    if (m.flags && (m.flags.includes('k') || m.flags.includes('q'))) s += 35;
+    return s;
+  }
+  function minimax(depth, alpha, beta) {
+    if (depth === 0 || game.game_over()) return evaluate();
+    const moves = game.moves({verbose:true});
+    moves.sort((a,b) => moveOrderScore(b) - moveOrderScore(a));
+    if (game.turn() === 'b') {
+      let best = -Infinity;
+      for (const m of moves) {
+        game.move({from:m.from,to:m.to,promotion:m.promotion});
+        const score = minimax(depth-1, alpha, beta);
+        game.undo();
+        if (score > best) best = score;
+        if (best > alpha) alpha = best;
+        if (beta <= alpha) break;
+      }
+      return best;
+    } else {
+      let best = Infinity;
+      for (const m of moves) {
+        game.move({from:m.from,to:m.to,promotion:m.promotion});
+        const score = minimax(depth-1, alpha, beta);
+        game.undo();
+        if (score < best) best = score;
+        if (best < beta) beta = best;
+        if (beta <= alpha) break;
+      }
+      return best;
+    }
+  }
+  function makeAIMove() {
+    if (game.game_over()) { thinking=false; render(); return; }
+    const moves = game.moves({verbose:true});
+    let bestScore = -Infinity;
+    let bestMoves = [];
+    // Shallow search prioritizes fast replies; keep move ordering for sensible choices.
+    moves.sort((a,b) => moveOrderScore(b) - moveOrderScore(a));
+    for (const m of moves) {
+      game.move({from:m.from,to:m.to,promotion:m.promotion});
+      const score = minimax(1, -Infinity, Infinity);
+      game.undo();
+      if (score > bestScore) { bestScore=score; bestMoves=[m]; }
+      else if (score === bestScore) bestMoves.push(m);
+    }
+    const chosen = bestMoves[Math.floor(Math.random()*bestMoves.length)];
+    const result = game.move({from:chosen.from,to:chosen.to,promotion:chosen.promotion});
+    if (result) lastMove = {from:result.from,to:result.to};
+    thinking = false;
+    render();
+    if (game.game_over()) detailEl.textContent = 'La partida terminó. Pulsa “Nueva partida” para volver a jugar.';
+    else detailEl.textContent = game.in_check() ? '¡Jaque! Te toca responder.' : 'Tu turno. Elige una pieza blanca.';
+  }
+  function updateStatus() {
+    if (!game) return;
+    if (game.in_checkmate()) {
+      statusEl.textContent = game.turn() === 'w' ? 'Jaque mate — ganan negras' : 'Jaque mate — ganan blancas';
+    } else if (game.in_draw() || game.in_stalemate() || game.in_threefold_repetition() || game.insufficient_material()) {
+      statusEl.textContent = 'Tablas — partida empatada';
+    } else if (thinking) {
+      statusEl.textContent = 'La computadora está pensando…';
+    } else if (game.in_check()) {
+      statusEl.textContent = game.turn() === 'w' ? '¡Jaque a las blancas!' : '¡Jaque a las negras!';
+    } else {
+      statusEl.textContent = game.turn() === 'w' ? 'Tu turno — blancas' : 'Turno de negras';
+    }
+  }
+  function updateMoves() {
+    const hist = game.history();
+    if (!hist.length) { movesEl.textContent='La partida todavía no ha comenzado.'; return; }
+    movesEl.innerHTML = '';
+    for (let i=0;i<hist.length;i+=2) {
+      const row=document.createElement('div'); row.className='move-row';
+      const n=document.createElement('span'); n.textContent=(Math.floor(i/2)+1)+'.';
+      const w=document.createElement('span'); w.textContent=hist[i] || '';
+      const b=document.createElement('span'); b.textContent=hist[i+1] || '';
+      row.append(n,w,b); movesEl.appendChild(row);
+    }
+    movesEl.scrollTop=movesEl.scrollHeight;
+  }
+  document.getElementById('newGame').addEventListener('click', startGame);
+
+  // Progressive Web App install prompt (available in supported browsers after hosting on HTTPS).
+  let deferredInstallPrompt = null;
+  const installButton = document.getElementById('installApp');
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    installButton.hidden = false;
+  });
+  installButton.addEventListener('click', async () => {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    installButton.hidden = true;
+  });
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+  }
+  document.getElementById('flip').addEventListener('click', () => { flipped=!flipped; render(); });
+  undoBtn.addEventListener('click', () => {
+    if (thinking) return;
+    if (game.history().length) game.undo();
+    if (game.history().length && game.turn()==='b') game.undo();
+    selected=null; legalMoves=[]; lastMove=null; promotionEl.style.display='none'; render();
+    detailEl.textContent='Se deshizo el último turno. Continúa jugando con blancas.';
+  });
+  if (typeof Chess === 'undefined') {
+    statusEl.textContent='No se pudo cargar el motor de ajedrez';
+    detailEl.textContent='Comprueba tu conexión a internet y vuelve a abrir el archivo.';
+    document.getElementById('newGame').disabled=true;
+  } else startGame();
+})();
+</script>
+</body>
+</html>

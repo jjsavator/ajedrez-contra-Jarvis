@@ -1,0 +1,20 @@
+AJEDREZ CONTRA JARVIS — APLICACIÓN WEB INSTALABLE
+
+Archivos:
+- index.html: juego
+- manifest.json: configuración de instalación
+- sw.js: caché básica de la aplicación
+- icon.svg: icono
+
+PARA PROBAR LOCALMENTE:
+Abre index.html en tu navegador. El juego necesita internet para cargar chess.js desde CDN.
+
+PARA QUE TUS AMIGOS PUEDAN USARLA:
+1. Sube TODOS los archivos de esta carpeta a un alojamiento web estático que proporcione HTTPS.
+2. Comparte el enlace público con tus amigos.
+3. En Android/Chrome: menú ⋮ > Instalar aplicación o Añadir a pantalla de inicio.
+   En iPhone/Safari: Compartir > Añadir a pantalla de inicio.
+
+IMPORTANTE:
+Esta versión juega contra una IA local integrada en el navegador; no se conecta a ChatGPT en vivo.
+Cada amigo juega su propia partida. Para publicar hace falta alojamiento web; el ZIP por sí solo no crea un enlace público.

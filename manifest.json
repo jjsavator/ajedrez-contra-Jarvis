@@ -1,0 +1,19 @@
+{
+  "name": "Ajedrez contra Jarvis",
+  "short_name": "Jarvis Ajedrez",
+  "description": "Juega ajedrez contra Jarvis.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f5f7",
+  "theme_color": "#285c42",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

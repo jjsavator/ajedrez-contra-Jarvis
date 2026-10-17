@@ -70,6 +70,14 @@
     .sq { font-size:clamp(1.55rem, 9.6vw, 2.4rem); }
     .coords { font-size:9px; }
   }
+
+  .piece.king-check { display:inline-block; transform-origin:50% 70%; animation: king-tremble .12s linear infinite; filter:drop-shadow(0 0 5px #d72e2e) drop-shadow(0 0 9px #ff5b5b); }
+  .piece.king-mate { display:inline-block; animation: king-shatter .8s ease-in forwards; filter:drop-shadow(0 0 6px #ff4242); }
+  @keyframes king-tremble { 0%,100% { transform:translate(0,0) rotate(0deg); } 25% { transform:translate(-1.5px,1px) rotate(-3deg); } 50% { transform:translate(1.5px,-1px) rotate(3deg); } 75% { transform:translate(-1px,-1px) rotate(-2deg); } }
+  @keyframes king-shatter { 0% { transform:scale(1) rotate(0); opacity:1; } 18% { transform:scale(1.08) rotate(-8deg); opacity:1; } 38% { transform:scale(.9) rotate(10deg); opacity:.95; } 65% { transform:scale(1.15) rotate(-18deg); opacity:.6; filter:blur(1px) drop-shadow(0 0 10px #ff2929); } 100% { transform:scale(.25) rotate(40deg); opacity:0; filter:blur(4px); } }
+  .sq:has(.king-check) { box-shadow:inset 0 0 0 3px #df3333, inset 0 0 16px #ff333355; }
+  .sq:has(.king-mate) { overflow:visible; }
+
   .credits { text-align:center; margin:22px 0 8px; padding:14px 10px; color:#626b76; font-size:.92rem; border-top:1px solid #d9dde2; }
 </style>
 </head>
@@ -184,25 +192,44 @@
     updateClocks();
   }
 
-  // Melodía instrumental original generada localmente; no necesita archivos de audio.
+  // Piano ambiental original: notas lentas, suaves y algo tensas; se genera localmente.
   function playMusicNote() {
     if (!musicOn || !audioContext) return;
-    const melody = [261.63,329.63,392.00,329.63,293.66,349.23,440.00,349.23,261.63,329.63,392.00,523.25,440.00,392.00,329.63,293.66];
+    const progression = [
+      [220.00,261.63,329.63], [196.00,246.94,293.66],
+      [174.61,220.00,261.63], [196.00,233.08,293.66],
+      [220.00,261.63,311.13], [164.81,207.65,246.94],
+      [196.00,233.08,293.66], [174.61,220.00,277.18]
+    ];
+    const chord = progression[Math.floor(musicStep / 3) % progression.length];
+    const notePattern = [0,2,1,2,0,1,2,1,0,2,1,0];
+    const freq = chord[notePattern[musicStep % notePattern.length]];
     const now = audioContext.currentTime;
-    const osc = audioContext.createOscillator();
-    const gain = audioContext.createGain();
-    osc.type = 'sine'; osc.frequency.value = melody[musicStep % melody.length];
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.045, now + 0.04);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.42);
-    osc.connect(gain); gain.connect(audioContext.destination);
-    osc.start(now); osc.stop(now + 0.44);
-    if (musicStep % 4 === 0) {
-      const bass = audioContext.createOscillator(); const bg = audioContext.createGain();
-      bass.type='triangle'; bass.frequency.value=melody[musicStep % melody.length] / 2;
-      bg.gain.setValueAtTime(0.0001,now); bg.gain.exponentialRampToValueAtTime(0.018,now+0.04); bg.gain.exponentialRampToValueAtTime(0.0001,now+0.55);
-      bass.connect(bg); bg.connect(audioContext.destination); bass.start(now); bass.stop(now+0.57);
+    function pianoTone(frequency, when, duration, volume, detune=0) {
+      const osc = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      const filter = audioContext.createBiquadFilter();
+      osc.type = 'triangle'; osc.frequency.setValueAtTime(frequency, when); osc.detune.value = detune;
+      filter.type = 'lowpass'; filter.frequency.setValueAtTime(1700, when);
+      gain.gain.setValueAtTime(0.0001, when);
+      gain.gain.linearRampToValueAtTime(volume, when + 0.012);
+      gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, volume * 0.28), when + 0.22);
+      gain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
+      osc.connect(filter); filter.connect(gain); gain.connect(audioContext.destination);
+      osc.start(when); osc.stop(when + duration + 0.02);
+      // Un armónico suave da una sensación parecida al cuerpo de una tecla de piano.
+      const overtone = audioContext.createOscillator(); const og = audioContext.createGain();
+      overtone.type='sine'; overtone.frequency.setValueAtTime(frequency*2.01, when);
+      og.gain.setValueAtTime(0.0001,when); og.gain.linearRampToValueAtTime(volume*0.16,when+0.01); og.gain.exponentialRampToValueAtTime(0.0001,when+Math.min(duration,0.42));
+      overtone.connect(og); og.connect(audioContext.destination); overtone.start(when); overtone.stop(when+Math.min(duration,0.44));
     }
+    pianoTone(freq, now, 1.25, 0.035, (musicStep % 2 ? -2 : 2));
+    if (musicStep % 3 === 0) {
+      pianoTone(chord[0] / 2, now + 0.015, 1.65, 0.019);
+      pianoTone(chord[1], now + 0.11, 0.95, 0.012, -1);
+    }
+    // Nota grave ocasional que mantiene una tensión discreta sin subir mucho el volumen.
+    if (musicStep % 6 === 4) pianoTone(chord[0] * 0.75, now + 0.03, 1.05, 0.009);
     musicStep++;
   }
   async function toggleMusic() {
@@ -213,7 +240,7 @@
         if (!AudioCtx) { btn.textContent = 'La música no es compatible'; return; }
         audioContext = audioContext || new AudioCtx();
         await audioContext.resume(); musicOn = true; playMusicNote();
-        musicTimer = setInterval(playMusicNote, 460);
+        musicTimer = setInterval(playMusicNote, 780);
         btn.textContent = '♫ Apagar música';
       } catch (e) { btn.textContent = 'No se pudo activar la música'; }
     } else {
@@ -250,6 +277,10 @@
         const span = document.createElement('span');
         span.className = 'piece ' + (p.color === 'w' ? 'white-piece' : 'black-piece');
         span.textContent = glyphs[p.color + p.type];
+        if (p.type === 'k' && game.in_check() && p.color === game.turn()) {
+          span.classList.add(game.in_checkmate() ? 'king-mate' : 'king-check');
+          btn.classList.add(game.in_checkmate() ? 'mate-square' : 'check-square');
+        }
         btn.appendChild(span);
       }
       btn.addEventListener('click', () => clickSquare(sq));

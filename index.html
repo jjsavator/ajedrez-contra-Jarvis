@@ -7,7 +7,7 @@
 <meta name="description" content="Juega ajedrez contra Jarvis desde tu celular o computadora.">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<title>Ajedrez contra la computadora</title>
+<title>Ajedrez contra Jarvis</title>
 <style>
   :root { --light:#f0d9b5; --dark:#b58863; --accent:#4f7c59; --bg:#f4f5f7; --ink:#20242b; }
   * { box-sizing:border-box; }
@@ -45,6 +45,13 @@
   .promotion { margin-top:12px; display:none; }
   .promotion select { width:100%; padding:9px; border-radius:7px; border:1px solid #ccd1d8; font:inherit; }
   .small { font-size:.82rem; color:#6a717b; margin-top:12px; }
+  .extras { display:grid; gap:10px; margin:0 0 12px; padding:12px; background:#f6f7f8; border-radius:9px; }
+  .clock-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .clock { border-radius:8px; padding:9px 8px; text-align:center; background:#e9edf1; }
+  .clock.active { background:#d9eadf; box-shadow:inset 0 0 0 2px #4f7c59; }
+  .clock-label { display:block; font-size:.78rem; color:#5c6470; }
+  .clock-time { display:block; font-size:1.35rem; font-weight:800; font-variant-numeric:tabular-nums; }
+  .extras select { width:100%; border:1px solid #ccd1d8; border-radius:7px; padding:9px; font:inherit; background:white; }
   @media(max-width:700px) {
     main { padding:10px; }
     .layout { grid-template-columns:1fr; gap:12px; }
@@ -63,7 +70,8 @@
     .sq { font-size:clamp(1.55rem, 9.6vw, 2.4rem); }
     .coords { font-size:9px; }
   }
-  .credits { text-align:center; margin:22px 0 8px; padding:14px 10px; color:#626b76; font-size:.92rem; border-top:1px solid #d9dde2; }\n</style>
+  .credits { text-align:center; margin:22px 0 8px; padding:14px 10px; color:#626b76; font-size:.92rem; border-top:1px solid #d9dde2; }
+</style>
 </head>
 <body>
 <main>
@@ -76,6 +84,17 @@
     <aside class="panel">
       <p id="status" class="status">Tu turno — blancas</p>
       <p id="detail" class="detail">Selecciona una pieza blanca para ver sus movimientos legales.</p>
+      <div class="extras">
+        <strong>⏱️ Reloj de la partida</strong>
+        <div class="clock-row">
+          <div id="whiteClockBox" class="clock active"><span class="clock-label">Tú · blancas</span><span id="whiteClock" class="clock-time">05:00</span></div>
+          <div id="blackClockBox" class="clock"><span class="clock-label">Jarvis · negras</span><span id="blackClock" class="clock-time">05:00</span></div>
+        </div>
+        <label for="timeControl">Tiempo por jugador</label>
+        <select id="timeControl"><option value="3">3 minutos</option><option value="5" selected>5 minutos</option><option value="10">10 minutos</option><option value="15">15 minutos</option></select>
+        <button id="musicToggle" class="action secondary" type="button">♫ Activar música</button>
+        <span class="small" style="margin-top:0">La música es una melodía original creada por el juego. Puedes apagarla cuando quieras.</span>
+      </div>
       <div class="buttons">
         <button id="newGame" class="action primary">↻ Nueva partida</button>
         <button id="installApp" class="action secondary" hidden>＋ Instalar aplicación</button>
@@ -113,6 +132,15 @@
   let flipped = false;
   let thinking = false;
   let lastMove = null;
+  let initialSeconds = 300;
+  let whiteSeconds = initialSeconds;
+  let blackSeconds = initialSeconds;
+  let clockStamp = Date.now();
+  let timeExpired = false;
+  let audioContext = null;
+  let musicTimer = null;
+  let musicOn = false;
+  let musicStep = 0;
   const glyphs = {
     wk:'♔', wq:'♕', wr:'♖', wb:'♗', wn:'♘', wp:'♙',
     bk:'♚', bq:'♛', br:'♜', bb:'♝', bn:'♞', bp:'♟'
@@ -122,9 +150,77 @@
   function startGame() {
     game = new Chess();
     selected = null; legalMoves = []; thinking = false; lastMove = null;
+    initialSeconds = Number(document.getElementById('timeControl').value) * 60;
+    whiteSeconds = initialSeconds; blackSeconds = initialSeconds;
+    clockStamp = Date.now(); timeExpired = false;
     promotionEl.style.display = 'none';
-    render();
+    render(); updateClocks();
     detailEl.textContent = 'Selecciona una pieza blanca para ver sus movimientos legales.';
+  }
+
+  function formatTime(seconds) {
+    seconds = Math.max(0, Math.ceil(seconds));
+    return String(Math.floor(seconds / 60)).padStart(2,'0') + ':' + String(seconds % 60).padStart(2,'0');
+  }
+  function updateClocks() {
+    document.getElementById('whiteClock').textContent = formatTime(whiteSeconds);
+    document.getElementById('blackClock').textContent = formatTime(blackSeconds);
+    document.getElementById('whiteClockBox').classList.toggle('active', !timeExpired && game && game.turn()==='w' && !game.game_over());
+    document.getElementById('blackClockBox').classList.toggle('active', !timeExpired && game && game.turn()==='b' && !game.game_over());
+  }
+  function clockTick() {
+    if (!game || timeExpired || game.game_over()) { clockStamp = Date.now(); return; }
+    const now = Date.now();
+    const elapsed = (now - clockStamp) / 1000;
+    clockStamp = now;
+    if (game.turn() === 'w') whiteSeconds -= elapsed; else blackSeconds -= elapsed;
+    if (whiteSeconds <= 0 || blackSeconds <= 0) {
+      timeExpired = true; whiteSeconds = Math.max(0,whiteSeconds); blackSeconds = Math.max(0,blackSeconds);
+      thinking = false;
+      statusEl.textContent = whiteSeconds <= 0 ? 'Tiempo agotado — gana Jarvis' : 'Tiempo agotado — ganas tú';
+      detailEl.textContent = 'Se terminó el tiempo de uno de los jugadores. Pulsa “Nueva partida” para volver a jugar.';
+      selected = null; legalMoves = []; render();
+    }
+    updateClocks();
+  }
+
+  // Melodía instrumental original generada localmente; no necesita archivos de audio.
+  function playMusicNote() {
+    if (!musicOn || !audioContext) return;
+    const melody = [261.63,329.63,392.00,329.63,293.66,349.23,440.00,349.23,261.63,329.63,392.00,523.25,440.00,392.00,329.63,293.66];
+    const now = audioContext.currentTime;
+    const osc = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    osc.type = 'sine'; osc.frequency.value = melody[musicStep % melody.length];
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.045, now + 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.42);
+    osc.connect(gain); gain.connect(audioContext.destination);
+    osc.start(now); osc.stop(now + 0.44);
+    if (musicStep % 4 === 0) {
+      const bass = audioContext.createOscillator(); const bg = audioContext.createGain();
+      bass.type='triangle'; bass.frequency.value=melody[musicStep % melody.length] / 2;
+      bg.gain.setValueAtTime(0.0001,now); bg.gain.exponentialRampToValueAtTime(0.018,now+0.04); bg.gain.exponentialRampToValueAtTime(0.0001,now+0.55);
+      bass.connect(bg); bg.connect(audioContext.destination); bass.start(now); bass.stop(now+0.57);
+    }
+    musicStep++;
+  }
+  async function toggleMusic() {
+    const btn = document.getElementById('musicToggle');
+    if (!musicOn) {
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) { btn.textContent = 'La música no es compatible'; return; }
+        audioContext = audioContext || new AudioCtx();
+        await audioContext.resume(); musicOn = true; playMusicNote();
+        musicTimer = setInterval(playMusicNote, 460);
+        btn.textContent = '♫ Apagar música';
+      } catch (e) { btn.textContent = 'No se pudo activar la música'; }
+    } else {
+      musicOn = false; clearInterval(musicTimer); musicTimer = null;
+      if (audioContext) audioContext.suspend();
+      btn.textContent = '♫ Activar música';
+    }
   }
 
   function pieceAt(square) { return game.get(square); }
@@ -165,7 +261,7 @@
   }
 
   function clickSquare(sq) {
-    if (thinking || game.game_over() || game.turn() !== 'w') return;
+    if (thinking || timeExpired || game.game_over() || game.turn() !== 'w') return;
     const p = pieceAt(sq);
     if (selected && legalMoves.some(m => m.to === sq)) {
       const matching = legalMoves.filter(m => m.to === sq);
@@ -260,7 +356,7 @@
     }
   }
   function makeAIMove() {
-    if (game.game_over()) { thinking=false; render(); return; }
+    if (timeExpired || game.game_over()) { thinking=false; render(); return; }
     const moves = game.moves({verbose:true});
     let bestScore = -Infinity;
     let bestMoves = [];
@@ -283,7 +379,9 @@
   }
   function updateStatus() {
     if (!game) return;
-    if (game.in_checkmate()) {
+    if (timeExpired) {
+      statusEl.textContent = whiteSeconds <= 0 ? 'Tiempo agotado — gana Jarvis' : 'Tiempo agotado — ganas tú';
+    } else if (game.in_checkmate()) {
       statusEl.textContent = game.turn() === 'w' ? 'Jaque mate — ganan negras' : 'Jaque mate — ganan blancas';
     } else if (game.in_draw() || game.in_stalemate() || game.in_threefold_repetition() || game.insufficient_material()) {
       statusEl.textContent = 'Tablas — partida empatada';
@@ -309,6 +407,9 @@
     movesEl.scrollTop=movesEl.scrollHeight;
   }
   document.getElementById('newGame').addEventListener('click', startGame);
+  document.getElementById('timeControl').addEventListener('change', startGame);
+  document.getElementById('musicToggle').addEventListener('click', toggleMusic);
+  setInterval(clockTick, 200);
 
   // Progressive Web App install prompt (available in supported browsers after hosting on HTTPS).
   let deferredInstallPrompt = null;

@@ -379,6 +379,9 @@
       const move = game.move({ from:selected, to:sq, promotion });
       selected = null; legalMoves = []; promotionEl.style.display = 'none';
       if (move) {
+        // Cierra el tiempo del jugador justo al completar su movimiento.
+        // Así el cálculo de Jarvis no se carga por error al reloj humano.
+        clockStamp = Date.now();
         lastMove = {from:move.from,to:move.to};
         render();
         if (!game.game_over() && playMode === 'jarvis' && game.turn() === 'b') {
@@ -475,6 +478,7 @@
   }
   function makeAIMove(token) {
     aiTimer = null;
+    const aiStartTime = Date.now();
     if (token !== aiToken || !gameStarted || paused || timeExpired || game.game_over() || game.turn() !== 'b') { thinking=false; render(); return; }
     const moves = game.moves({verbose:true});
     let bestScore = -Infinity;
@@ -487,6 +491,16 @@
       game.undo();
       if (score > bestScore) { bestScore=score; bestMoves=[m]; }
       else if (score === bestScore) bestMoves.push(m);
+    }
+    // El tiempo de cálculo pertenece al reloj de Jarvis, no al del jugador humano.
+    const aiElapsed = (Date.now() - aiStartTime) / 1000;
+    blackSeconds = Math.max(0, blackSeconds - aiElapsed);
+    clockStamp = Date.now();
+    if (blackSeconds <= 0) {
+      timeExpired = true; thinking = false;
+      statusEl.textContent = 'Tiempo agotado — ganas tú';
+      detailEl.textContent = 'Jarvis agotó su tiempo. Pulsa “Nueva partida” para volver a jugar.';
+      render(); updateClocks(); return;
     }
     if (!gameStarted || paused || timeExpired || game.game_over() || game.turn() !== 'b' || token !== aiToken) { thinking=false; render(); return; }
     const chosen = bestMoves[Math.floor(Math.random()*bestMoves.length)];

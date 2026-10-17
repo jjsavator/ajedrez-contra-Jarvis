@@ -1,20 +1,18 @@
-AJEDREZ CONTRA JARVIS — APLICACIÓN WEB INSTALABLE
+ACTUALIZACIÓN: AJEDREZ CONTRA JARVIS
 
-Archivos:
-- index.html: juego
-- manifest.json: configuración de instalación
-- sw.js: caché básica de la aplicación
-- icon.svg: icono
+Esta versión incluye:
+- Jarvis analiza más movimientos antes de elegir.
+- Protección para que Jarvis solo mueva cuando sea su turno.
+- Pausa de 1.2 segundos antes de la respuesta de Jarvis.
+- Música continua mientras esté activada; intenta reanudarse al volver a la pestaña.
+- Temporizador mínimo de 7 minutos por jugador.
+- Botones para iniciar, pausar/reanudar y preparar una nueva partida.
 
-PARA PROBAR LOCALMENTE:
-Abre index.html en tu navegador. El juego necesita internet para cargar chess.js desde CDN.
+PARA PUBLICAR EN GITHUB PAGES
+1. Descomprime este ZIP.
+2. Entra en el repositorio ajedrez-contra-jarvis.
+3. Reemplaza los archivos existentes por los de esta carpeta, conservando sus nombres.
+4. Guarda los cambios con Commit changes.
+5. Espera a que GitHub Pages publique la actualización.
 
-PARA QUE TUS AMIGOS PUEDAN USARLA:
-1. Sube TODOS los archivos de esta carpeta a un alojamiento web estático que proporcione HTTPS.
-2. Comparte el enlace público con tus amigos.
-3. En Android/Chrome: menú ⋮ > Instalar aplicación o Añadir a pantalla de inicio.
-   En iPhone/Safari: Compartir > Añadir a pantalla de inicio.
-
-IMPORTANTE:
-Esta versión juega contra una IA local integrada en el navegador; no se conecta a ChatGPT en vivo.
-Cada amigo juega su propia partida. Para publicar hace falta alojamiento web; el ZIP por sí solo no crea un enlace público.
+La música necesita que el jugador la active una vez, porque los navegadores bloquean el audio automático.

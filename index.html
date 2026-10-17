@@ -95,16 +95,18 @@
       <div class="extras">
         <strong>⏱️ Reloj de la partida</strong>
         <div class="clock-row">
-          <div id="whiteClockBox" class="clock active"><span class="clock-label">Tú · blancas</span><span id="whiteClock" class="clock-time">05:00</span></div>
-          <div id="blackClockBox" class="clock"><span class="clock-label">Jarvis · negras</span><span id="blackClock" class="clock-time">05:00</span></div>
+          <div id="whiteClockBox" class="clock active"><span class="clock-label">Tú · blancas</span><span id="whiteClock" class="clock-time">07:00</span></div>
+          <div id="blackClockBox" class="clock"><span class="clock-label">Jarvis · negras</span><span id="blackClock" class="clock-time">07:00</span></div>
         </div>
         <label for="timeControl">Tiempo por jugador</label>
-        <select id="timeControl"><option value="3">3 minutos</option><option value="5" selected>5 minutos</option><option value="10">10 minutos</option><option value="15">15 minutos</option></select>
+        <select id="timeControl"><option value="7" selected>7 minutos</option><option value="10">10 minutos</option><option value="15">15 minutos</option><option value="20">20 minutos</option></select>
         <button id="musicToggle" class="action secondary" type="button">♫ Activar música</button>
         <span class="small" style="margin-top:0">La música es una melodía original creada por el juego. Puedes apagarla cuando quieras.</span>
       </div>
       <div class="buttons">
-        <button id="newGame" class="action primary">↻ Nueva partida</button>
+        <button id="startGame" class="action primary">▶ Iniciar partida</button>
+        <button id="pauseGame" class="action secondary" disabled>⏸ Pausar partida</button>
+        <button id="newGame" class="action secondary">↻ Nueva partida</button>
         <button id="installApp" class="action secondary" hidden>＋ Instalar aplicación</button>
         <button id="undo" class="action secondary">↶ Deshacer último turno</button>
         <button id="flip" class="action secondary">⇅ Girar tablero</button>
@@ -117,7 +119,7 @@
         <h2>Movimientos</h2>
         <div id="moves" class="move-list">La partida todavía no ha comenzado.</div>
       </div>
-      <p class="legend">La computadora juega automáticamente con negras y responde rápidamente. Las piezas pueden avanzar o retroceder siempre que su movimiento sea legal.</p>
+      <p class="legend">Jarvis juega con negras. La partida comienza cuando pulses “Iniciar partida”; puedes pausarla en cualquier momento.</p>
       <p class="small">La primera vez necesitas conexión a internet para cargar el motor de reglas de ajedrez. Después de abrir el archivo, el juego funciona en esta pestaña mientras esa biblioteca esté disponible.</p>
     </aside>
   </div>
@@ -140,7 +142,11 @@
   let flipped = false;
   let thinking = false;
   let lastMove = null;
-  let initialSeconds = 300;
+  let gameStarted = false;
+  let paused = false;
+  let aiTimer = null;
+  let aiToken = 0;
+  let initialSeconds = 420;
   let whiteSeconds = initialSeconds;
   let blackSeconds = initialSeconds;
   let clockStamp = Date.now();
@@ -156,14 +162,52 @@
   const files = ['a','b','c','d','e','f','g','h'];
 
   function startGame() {
+    if (aiTimer) clearTimeout(aiTimer);
+    aiTimer = null; aiToken++;
     game = new Chess();
     selected = null; legalMoves = []; thinking = false; lastMove = null;
-    initialSeconds = Number(document.getElementById('timeControl').value) * 60;
+    gameStarted = true; paused = false;
+    initialSeconds = Math.max(420, Number(document.getElementById('timeControl').value) * 60);
     whiteSeconds = initialSeconds; blackSeconds = initialSeconds;
     clockStamp = Date.now(); timeExpired = false;
     promotionEl.style.display = 'none';
+    document.getElementById('startGame').disabled = true;
+    document.getElementById('pauseGame').disabled = false;
+    document.getElementById('pauseGame').textContent = '⏸ Pausar partida';
     render(); updateClocks();
-    detailEl.textContent = 'Selecciona una pieza blanca para ver sus movimientos legales.';
+    detailEl.textContent = 'La partida comenzó. Juegas con blancas.';
+  }
+  function prepareGame() {
+    if (aiTimer) clearTimeout(aiTimer);
+    aiTimer = null; aiToken++;
+    game = new Chess(); selected = null; legalMoves = []; thinking = false; lastMove = null;
+    gameStarted = false; paused = false;
+    initialSeconds = Math.max(420, Number(document.getElementById('timeControl').value) * 60);
+    whiteSeconds = initialSeconds; blackSeconds = initialSeconds;
+    clockStamp = Date.now(); timeExpired = false;
+    promotionEl.style.display = 'none';
+    document.getElementById('startGame').disabled = false;
+    document.getElementById('pauseGame').disabled = true;
+    document.getElementById('pauseGame').textContent = '⏸ Pausar partida';
+    render(); updateClocks();
+    detailEl.textContent = 'Cuando estés listo, pulsa “Iniciar partida”.';
+  }
+  function togglePause() {
+    if (!gameStarted || timeExpired || game.game_over()) return;
+    paused = !paused;
+    clockStamp = Date.now();
+    document.getElementById('pauseGame').textContent = paused ? '▶ Reanudar partida' : '⏸ Pausar partida';
+    selected = null; legalMoves = [];
+    if (paused) {
+      if (aiTimer) clearTimeout(aiTimer);
+      aiTimer = null; aiToken++; thinking = false;
+      detailEl.textContent = 'Partida pausada. Pulsa “Reanudar partida” cuando quieras continuar.';
+    } else if (game.turn() === 'b') {
+      scheduleAIMove();
+    } else {
+      detailEl.textContent = 'Partida reanudada. Es tu turno.';
+    }
+    render(); updateClocks();
   }
 
   function formatTime(seconds) {
@@ -177,7 +221,7 @@
     document.getElementById('blackClockBox').classList.toggle('active', !timeExpired && game && game.turn()==='b' && !game.game_over());
   }
   function clockTick() {
-    if (!game || timeExpired || game.game_over()) { clockStamp = Date.now(); return; }
+    if (!game || !gameStarted || paused || timeExpired || game.game_over()) { clockStamp = Date.now(); return; }
     const now = Date.now();
     const elapsed = (now - clockStamp) / 1000;
     clockStamp = now;
@@ -232,6 +276,9 @@
     if (musicStep % 6 === 4) pianoTone(chord[0] * 0.75, now + 0.03, 1.05, 0.009);
     musicStep++;
   }
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && musicOn && audioContext && audioContext.state !== 'running') audioContext.resume().catch(() => {});
+  });
   async function toggleMusic() {
     const btn = document.getElementById('musicToggle');
     if (!musicOn) {
@@ -292,7 +339,7 @@
   }
 
   function clickSquare(sq) {
-    if (thinking || timeExpired || game.game_over() || game.turn() !== 'w') return;
+    if (!gameStarted || paused || thinking || timeExpired || game.game_over() || game.turn() !== 'w') return;
     const p = pieceAt(sq);
     if (selected && legalMoves.some(m => m.to === sq)) {
       const matching = legalMoves.filter(m => m.to === sq);
@@ -308,7 +355,7 @@
           statusEl.textContent = 'La computadora está pensando…';
           detailEl.textContent = 'La computadora juega con negras.';
           undoBtn.disabled = true;
-          setTimeout(makeAIMove, 40);
+          scheduleAIMove();
         }
       } else render();
       return;
@@ -386,8 +433,16 @@
       return best;
     }
   }
-  function makeAIMove() {
-    if (timeExpired || game.game_over()) { thinking=false; render(); return; }
+  function scheduleAIMove() {
+    if (!gameStarted || paused || timeExpired || game.game_over() || game.turn() !== 'b') { thinking=false; render(); return; }
+    if (aiTimer) clearTimeout(aiTimer);
+    const token = ++aiToken;
+    thinking = true;
+    aiTimer = setTimeout(() => { if (token === aiToken) makeAIMove(token); }, 1200);
+  }
+  function makeAIMove(token) {
+    aiTimer = null;
+    if (token !== aiToken || !gameStarted || paused || timeExpired || game.game_over() || game.turn() !== 'b') { thinking=false; render(); return; }
     const moves = game.moves({verbose:true});
     let bestScore = -Infinity;
     let bestMoves = [];
@@ -395,11 +450,12 @@
     moves.sort((a,b) => moveOrderScore(b) - moveOrderScore(a));
     for (const m of moves) {
       game.move({from:m.from,to:m.to,promotion:m.promotion});
-      const score = minimax(1, -Infinity, Infinity);
+      const score = minimax(2, -Infinity, Infinity);
       game.undo();
       if (score > bestScore) { bestScore=score; bestMoves=[m]; }
       else if (score === bestScore) bestMoves.push(m);
     }
+    if (!gameStarted || paused || timeExpired || game.game_over() || game.turn() !== 'b' || token !== aiToken) { thinking=false; render(); return; }
     const chosen = bestMoves[Math.floor(Math.random()*bestMoves.length)];
     const result = game.move({from:chosen.from,to:chosen.to,promotion:chosen.promotion});
     if (result) lastMove = {from:result.from,to:result.to};
@@ -412,6 +468,10 @@
     if (!game) return;
     if (timeExpired) {
       statusEl.textContent = whiteSeconds <= 0 ? 'Tiempo agotado — gana Jarvis' : 'Tiempo agotado — ganas tú';
+    } else if (!gameStarted) {
+      statusEl.textContent = 'Listo para comenzar';
+    } else if (paused) {
+      statusEl.textContent = 'Partida pausada';
     } else if (game.in_checkmate()) {
       statusEl.textContent = game.turn() === 'w' ? 'Jaque mate — ganan negras' : 'Jaque mate — ganan blancas';
     } else if (game.in_draw() || game.in_stalemate() || game.in_threefold_repetition() || game.insufficient_material()) {
@@ -437,8 +497,10 @@
     }
     movesEl.scrollTop=movesEl.scrollHeight;
   }
-  document.getElementById('newGame').addEventListener('click', startGame);
-  document.getElementById('timeControl').addEventListener('change', startGame);
+  document.getElementById('startGame').addEventListener('click', startGame);
+  document.getElementById('pauseGame').addEventListener('click', togglePause);
+  document.getElementById('newGame').addEventListener('click', prepareGame);
+  document.getElementById('timeControl').addEventListener('change', prepareGame);
   document.getElementById('musicToggle').addEventListener('click', toggleMusic);
   setInterval(clockTick, 200);
 
@@ -462,7 +524,7 @@
   }
   document.getElementById('flip').addEventListener('click', () => { flipped=!flipped; render(); });
   undoBtn.addEventListener('click', () => {
-    if (thinking) return;
+    if (thinking || !gameStarted || paused) return;
     if (game.history().length) game.undo();
     if (game.history().length && game.turn()==='b') game.undo();
     selected=null; legalMoves=[]; lastMove=null; promotionEl.style.display='none'; render();
@@ -472,7 +534,7 @@
     statusEl.textContent='No se pudo cargar el motor de ajedrez';
     detailEl.textContent='Comprueba tu conexión a internet y vuelve a abrir el archivo.';
     document.getElementById('newGame').disabled=true;
-  } else startGame();
+  } else prepareGame();
 })();
 </script>
 </body>
